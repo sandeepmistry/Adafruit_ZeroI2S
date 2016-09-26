@@ -19,8 +19,12 @@
 //   https://github.com/adafruit/adafruit_asfcore
 //
 // Released under a MIT license: https://opensource.org/licenses/MIT
-#include "Adafruit_ASFCore.h"
+#ifdef ARDUINO_ARCH_ARC32
+#include <CurieI2S.h>
+#else
+#include "Adafruit_ASFcore.h"
 #include "Adafruit_ZeroI2S.h"
+#endif
 
 
 #define SAMPLERATE_HZ 44100  // The sample rate of the audio.  Higher sample rates have better fidelity,
@@ -54,12 +58,14 @@ int16_t sawtooth[WAV_SIZE] = {0};
 int16_t triangle[WAV_SIZE] = {0};
 int16_t square[WAV_SIZE]   = {0};
 
+#ifndef ARDUINO_ARCH_ARC32
 // Create I2S audio transmitter object.
 Adafruit_ZeroI2S_TX i2s = Adafruit_ZeroI2S_TX();
 
 // Little define to make the native USB port on the Arduino Zero / Zero feather
 // the default for serial output.
 #define Serial SerialUSB
+#endif
 
 
 void generateSine(uint16_t amplitude, int16_t* buffer, uint16_t length) {
@@ -102,6 +108,15 @@ void generateSquare(uint16_t amplitude, int16_t* buffer, uint16_t length) {
 }
 
 void playWave(int16_t* buffer, uint16_t length, float frequency, float seconds) {
+#ifdef ARDUINO_ARCH_ARC32
+  // push some silence to get things going
+  for (int i = 0; i < 64; i++) {
+     CurieI2S.pushData(0);
+     CurieI2S.pushData(0);
+  }
+  CurieI2S.startTX();
+#endif
+  
   // Play back the provided waveform buffer for the specified
   // amount of seconds.
   // First calculate how many samples need to play back to run
@@ -118,8 +133,16 @@ void playWave(int16_t* buffer, uint16_t length, float frequency, float seconds) 
     // Duplicate the sample so it's sent to both the left and right channel.
     // It appears the order is right channel, left channel if you want to write
     // stereo sound.
+#ifdef ARDUINO_ARCH_ARC32
+    // wait for some space
+    while(CurieI2S.availableTx() <= 2);
+
+    CurieI2S.pushData(sample);
+    CurieI2S.pushData(sample);
+#else
     i2s.write(sample);
     i2s.write(sample);
+#endif
   }
 }
 
@@ -128,6 +151,11 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Zero I2S Audio Tone Generator");
 
+#ifdef ARDUINO_ARCH_ARC32
+  CurieI2S.begin(I2S_44K, I2S_16bit);
+  CurieI2S.setI2SMode(PHILIPS_MODE);
+  CurieI2S.initTX();
+#else
   // Initialize the I2S transmitter.
   if (!i2s.begin()) {
     Serial.println("Failed to initialize I2S transmitter!");
@@ -142,6 +170,7 @@ void setup() {
     Serial.println("Failed to configure I2S transmitter for stereo 16-bit 44.1khz audio!");
     while (1);
   }
+#endif
 
   // Generate waveforms.
   generateSine(AMPLITUDE, sine, WAV_SIZE);

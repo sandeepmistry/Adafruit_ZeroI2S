@@ -110,7 +110,7 @@ void generateSquare(uint16_t amplitude, int16_t* buffer, uint16_t length) {
 void playWave(int16_t* buffer, uint16_t length, float frequency, float seconds) {
 #ifdef ARDUINO_ARCH_ARC32
   // push some silence to get things going
-  for (int i = 0; i < 64; i++) {
+  for (int i = 0; i < 16; i++) {
      CurieI2S.pushData(0);
      CurieI2S.pushData(0);
   }
@@ -134,11 +134,13 @@ void playWave(int16_t* buffer, uint16_t length, float frequency, float seconds) 
     // It appears the order is right channel, left channel if you want to write
     // stereo sound.
 #ifdef ARDUINO_ARCH_ARC32
-    // wait for some space
-    while(CurieI2S.availableTx() <= 2);
+    uint32_t adjustedSample = 32767 + sample;
 
-    CurieI2S.pushData(sample);
-    CurieI2S.pushData(sample);
+    // wait for some space
+    while(CurieI2S.availableTx() < 4);
+
+    CurieI2S.pushData(adjustedSample);
+    CurieI2S.pushData(adjustedSample);
 #else
     i2s.write(sample);
     i2s.write(sample);
@@ -149,6 +151,7 @@ void playWave(int16_t* buffer, uint16_t length, float frequency, float seconds) 
 void setup() {
   // Configure serial port.
   Serial.begin(115200);
+  while(!Serial);
   Serial.println("Zero I2S Audio Tone Generator");
 
 #ifdef ARDUINO_ARCH_ARC32
